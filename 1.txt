@@ -1,0 +1,1 @@
+python play.py --task=anymal_c_flat --num_envs=10
