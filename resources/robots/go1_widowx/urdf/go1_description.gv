@@ -1,0 +1,113 @@
+digraph G {
+node [shape=box];
+"base" [label="base"];
+"trunk" [label="trunk"];
+"FL_hip" [label="FL_hip"];
+"FL_thigh_shoulder" [label="FL_thigh_shoulder"];
+"FL_thigh" [label="FL_thigh"];
+"FL_calf" [label="FL_calf"];
+"FL_foot" [label="FL_foot"];
+"FR_hip" [label="FR_hip"];
+"FR_thigh_shoulder" [label="FR_thigh_shoulder"];
+"FR_thigh" [label="FR_thigh"];
+"FR_calf" [label="FR_calf"];
+"FR_foot" [label="FR_foot"];
+"RL_hip" [label="RL_hip"];
+"RL_thigh_shoulder" [label="RL_thigh_shoulder"];
+"RL_thigh" [label="RL_thigh"];
+"RL_calf" [label="RL_calf"];
+"RL_foot" [label="RL_foot"];
+"RR_hip" [label="RR_hip"];
+"RR_thigh_shoulder" [label="RR_thigh_shoulder"];
+"RR_thigh" [label="RR_thigh"];
+"RR_calf" [label="RR_calf"];
+"RR_foot" [label="RR_foot"];
+"imu_link" [label="imu_link"];
+"wx250s/base_link" [label="wx250s/base_link"];
+"wx250s/shoulder_link" [label="wx250s/shoulder_link"];
+"wx250s/upper_arm_link" [label="wx250s/upper_arm_link"];
+"wx250s/upper_forearm_link" [label="wx250s/upper_forearm_link"];
+"wx250s/lower_forearm_link" [label="wx250s/lower_forearm_link"];
+"wx250s/wrist_link" [label="wx250s/wrist_link"];
+"wx250s/gripper_link" [label="wx250s/gripper_link"];
+"wx250s/ee_arm_link" [label="wx250s/ee_arm_link"];
+"wx250s/gripper_prop_link" [label="wx250s/gripper_prop_link"];
+"wx250s/gripper_bar_link" [label="wx250s/gripper_bar_link"];
+"wx250s/fingers_link" [label="wx250s/fingers_link"];
+"wx250s/ee_gripper_link" [label="wx250s/ee_gripper_link"];
+"wx250s/left_finger_link" [label="wx250s/left_finger_link"];
+"wx250s/right_finger_link" [label="wx250s/right_finger_link"];
+node [shape=ellipse, color=blue, fontcolor=blue];
+"base" -> "floating_base" [label="xyz: 0 0 0 \nrpy: 0 -0 0"]
+"floating_base" -> "trunk"
+"trunk" -> "FL_hip_joint" [label="xyz: 0.1881 0.04675 0 \nrpy: 0 -0 0"]
+"FL_hip_joint" -> "FL_hip"
+"FL_hip" -> "FL_hip_fixed" [label="xyz: 0 0.08 0 \nrpy: 0 -0 0"]
+"FL_hip_fixed" -> "FL_thigh_shoulder"
+"FL_hip" -> "FL_thigh_joint" [label="xyz: 0 0.08 0 \nrpy: 0 -0 0"]
+"FL_thigh_joint" -> "FL_thigh"
+"FL_thigh" -> "FL_calf_joint" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"FL_calf_joint" -> "FL_calf"
+"FL_calf" -> "FL_foot_fixed" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"FL_foot_fixed" -> "FL_foot"
+"trunk" -> "FR_hip_joint" [label="xyz: 0.1881 -0.04675 0 \nrpy: 0 -0 0"]
+"FR_hip_joint" -> "FR_hip"
+"FR_hip" -> "FR_hip_fixed" [label="xyz: 0 -0.08 0 \nrpy: 0 -0 0"]
+"FR_hip_fixed" -> "FR_thigh_shoulder"
+"FR_hip" -> "FR_thigh_joint" [label="xyz: 0 -0.08 0 \nrpy: 0 -0 0"]
+"FR_thigh_joint" -> "FR_thigh"
+"FR_thigh" -> "FR_calf_joint" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"FR_calf_joint" -> "FR_calf"
+"FR_calf" -> "FR_foot_fixed" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"FR_foot_fixed" -> "FR_foot"
+"trunk" -> "RL_hip_joint" [label="xyz: -0.1881 0.04675 0 \nrpy: 0 -0 0"]
+"RL_hip_joint" -> "RL_hip"
+"RL_hip" -> "RL_hip_fixed" [label="xyz: 0 0.08 0 \nrpy: 0 -0 0"]
+"RL_hip_fixed" -> "RL_thigh_shoulder"
+"RL_hip" -> "RL_thigh_joint" [label="xyz: 0 0.08 0 \nrpy: 0 -0 0"]
+"RL_thigh_joint" -> "RL_thigh"
+"RL_thigh" -> "RL_calf_joint" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"RL_calf_joint" -> "RL_calf"
+"RL_calf" -> "RL_foot_fixed" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"RL_foot_fixed" -> "RL_foot"
+"trunk" -> "RR_hip_joint" [label="xyz: -0.1881 -0.04675 0 \nrpy: 0 -0 0"]
+"RR_hip_joint" -> "RR_hip"
+"RR_hip" -> "RR_hip_fixed" [label="xyz: 0 -0.08 0 \nrpy: 0 -0 0"]
+"RR_hip_fixed" -> "RR_thigh_shoulder"
+"RR_hip" -> "RR_thigh_joint" [label="xyz: 0 -0.08 0 \nrpy: 0 -0 0"]
+"RR_thigh_joint" -> "RR_thigh"
+"RR_thigh" -> "RR_calf_joint" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"RR_calf_joint" -> "RR_calf"
+"RR_calf" -> "RR_foot_fixed" [label="xyz: 0 0 -0.213 \nrpy: 0 -0 0"]
+"RR_foot_fixed" -> "RR_foot"
+"trunk" -> "imu_joint" [label="xyz: -0.01592 -0.06659 -0.00617 \nrpy: 0 -0 0"]
+"imu_joint" -> "imu_link"
+"base" -> "widow_mount" [label="xyz: 0.03 0 0.057 \nrpy: 0 -0 0"]
+"widow_mount" -> "wx250s/base_link"
+"wx250s/base_link" -> "widow_waist" [label="xyz: 0 0 0.072 \nrpy: 0 -0 0"]
+"widow_waist" -> "wx250s/shoulder_link"
+"wx250s/shoulder_link" -> "widow_shoulder" [label="xyz: 0 0 0.03865 \nrpy: 0 -0 0"]
+"widow_shoulder" -> "wx250s/upper_arm_link"
+"wx250s/upper_arm_link" -> "widow_elbow" [label="xyz: 0.04975 0 0.25 \nrpy: 0 -0 0"]
+"widow_elbow" -> "wx250s/upper_forearm_link"
+"wx250s/upper_forearm_link" -> "forearm_roll" [label="xyz: 0.175 0 0 \nrpy: 0 -0 0"]
+"forearm_roll" -> "wx250s/lower_forearm_link"
+"wx250s/lower_forearm_link" -> "widow_wrist_angle" [label="xyz: 0.075 0 0 \nrpy: 0 -0 0"]
+"widow_wrist_angle" -> "wx250s/wrist_link"
+"wx250s/wrist_link" -> "widow_wrist_rotate" [label="xyz: 0.065 0 0 \nrpy: 0 -0 0"]
+"widow_wrist_rotate" -> "wx250s/gripper_link"
+"wx250s/gripper_link" -> "ee_arm" [label="xyz: 0.043 0 0 \nrpy: 0 -0 0"]
+"ee_arm" -> "wx250s/ee_arm_link"
+"wx250s/ee_arm_link" -> "gripper" [label="xyz: 0.0055 0 0 \nrpy: 0 -0 0"]
+"gripper" -> "wx250s/gripper_prop_link"
+"wx250s/ee_arm_link" -> "gripper_bar" [label="xyz: 0 0 0 \nrpy: 0 -0 0"]
+"gripper_bar" -> "wx250s/gripper_bar_link"
+"wx250s/gripper_bar_link" -> "ee_bar" [label="xyz: 0.023 0 0 \nrpy: 0 -0 0"]
+"ee_bar" -> "wx250s/fingers_link"
+"wx250s/fingers_link" -> "ee_gripper" [label="xyz: 0.027575 0 0 \nrpy: 0 -0 0"]
+"ee_gripper" -> "wx250s/ee_gripper_link"
+"wx250s/fingers_link" -> "widow_left_finger" [label="xyz: 0 0 0 \nrpy: 0 -0 0"]
+"widow_left_finger" -> "wx250s/left_finger_link"
+"wx250s/fingers_link" -> "widow_right_finger" [label="xyz: 0 0 0 \nrpy: 0 -0 0"]
+"widow_right_finger" -> "wx250s/right_finger_link"
+}
