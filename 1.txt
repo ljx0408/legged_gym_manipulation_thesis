@@ -1,1 +1,1 @@
-python play.py --task=anymal_c_flat --num_envs=10
+python play.py --task=go1_windowx --num_envs=2

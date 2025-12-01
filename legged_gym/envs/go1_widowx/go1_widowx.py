@@ -56,6 +56,71 @@ class Go1WidowX(LeggedRobot):
                 self.p_gains[i] = 0.
                 self.d_gains[i] = 0.
 
+        # === 【建议新增】显式定义命令缩放比例 ===
+        # 确保它和你的 obs_commands (3维) 对应
+        # 需要用到 self.cfg.normalization.obs_scales，所以父类初始化要在前面
+        self.commands_scale = torch.tensor(
+            [self.cfg.normalization.obs_scales.lin_vel, 
+             self.cfg.normalization.obs_scales.lin_vel, 
+             self.cfg.normalization.obs_scales.ang_vel], 
+            device=self.device, 
+            requires_grad=False,
+            )
+
+    
+    def compute_observations(self):
+        """
+        核心修改：构建符合论文要求的 72 维观测向量。
+        包含：基座姿态(2)+角速度(3)+关节位置(18)+关节速度(18)+上一次动作(18)+指令(3)+目标(6)+接触(4)
+        """
+        # 1. 基座朝向 (Roll, Pitch) - [维度: 2]
+        # 论文使用欧拉角替代重力投影，更适合Sim2Real
+        base_rpy = get_euler_xyz(self.base_quat)
+        obs_base_orn = torch.stack(base_rpy[:2], dim=-1)
+
+        # 2. 基座角速度 - [维度: 3]
+        obs_base_ang_vel = self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel
+
+        # 3. 关节位置 (18个关节) - [维度: 18]
+        # 减去默认站立姿态，计算偏差值
+        obs_dof_pos = (self.dof_pos - self.default_dof_pos) * self.cfg.normalization.obs_scales.dof_pos
+
+        # 4. 关节速度 (18个关节) - [维度: 18]
+        obs_dof_vel = self.dof_vel * self.cfg.normalization.obs_scales.dof_vel
+
+        # 5. 上一次的动作 - [维度: 18]
+        # 帮助网络感知延迟和连贯性
+        obs_last_actions = self.actions
+
+        # 6. 速度指令 (x, y, yaw) - [维度: 3]
+        # 告诉机器人往哪走
+        obs_commands = self.commands[:, :3] * self.commands_scale
+
+        # 7. 末端目标 (Goal) - [维度: 6]
+        # 【重要】论文必须项。虽然现在还没写生成逻辑，先用0占位，保证网络结构正确。
+        batch_size = self.num_envs
+        obs_ee_goal = torch.zeros(batch_size, 6, device=self.device) 
+
+        # 8. 足底接触力 - [维度: 4]
+        # 论文提及的 contact indicators，帮助感知是否踩实
+        obs_foot_contacts = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 0.1).float()
+
+        # === 拼接数据 (总维度 72) ===
+        self.obs_buf = torch.cat((
+            obs_base_orn,       # 2
+            obs_base_ang_vel,   # 3
+            obs_dof_pos,        # 18
+            obs_dof_vel,        # 18
+            obs_last_actions,   # 18
+            obs_commands,       # 3
+            obs_ee_goal,        # 6
+            obs_foot_contacts   # 4
+        ), dim=-1)
+
+        # 同步特权观测（暂时和普通观测一样）
+        self.privileged_obs_buf = self.obs_buf
+        
+        return self.obs_buf
     def _compute_torques(self, actions):
         """
         【核心修改】计算电机力矩

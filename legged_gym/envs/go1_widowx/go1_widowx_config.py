@@ -32,58 +32,53 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class Go1WidowXRoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
-        num_envs = 4096
-        num_actions = 18
+        num_envs = 1
+        num_actions = 18     # 12腿 + 6臂
+        num_observations = 72  # 明确告诉程序只要 72 维
 
     class terrain( LeggedRobotCfg.terrain ):
         mesh_type = 'plane'
+        measure_heights = False  # 强制关闭地形扫描，防止产生额外的 187 维数据
 
     class init_state( LeggedRobotCfg.init_state ):
-        pos = [0.0, 0.0, 0.35] # x,y,z [m]
+        pos = [0.0, 0.0, 0.42] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
             # === 四条腿 (12个关节) ===
-            # 前左腿 (FL) [cite: 590, 593, 595]
-            "FL_hip_joint": 0.1,
-            "FL_thigh_joint": 0.8,
-            "FL_calf_joint": -1.5,
+            'FL_hip_joint': 0.1,   # [rad]
+            'FL_thigh_joint': 0.8,     # [rad]
+            'FL_calf_joint': -1.5,   # [rad]
 
-            # 前右腿 (FR) 
-            "FR_hip_joint": -0.1,
-            "FR_thigh_joint": 0.8,
-            "FR_calf_joint": -1.5,
+            'RL_hip_joint': 0.1,   # [rad]
+            'RL_thigh_joint': 0.8,   # [rad]
+            'RL_calf_joint': -1.5,    # [rad]
 
-            # 后左腿 (RL) [cite: 609, 612, 614]
-            "RL_hip_joint": 0.1,
-            "RL_thigh_joint": 1.0,
-            "RL_calf_joint": -1.5,
+            'FR_hip_joint': -0.1 ,  # [rad]
+            'FR_thigh_joint': 0.8,     # [rad]
+            'FR_calf_joint': -1.5,  # [rad]
 
-            # 后右腿 (RR) [cite: 600, 602, 604]
-            "RR_hip_joint": -0.1,
-            "RR_thigh_joint": 1.0,
-            "RR_calf_joint": -1.5,
+            'RR_hip_joint': -0.1,   # [rad]
+            'RR_thigh_joint': 0.8,   # [rad]
+            'RR_calf_joint': -1.5,    # [rad]
 
             # === 机械臂 (6个关节) ===
             # 名字来源 
             "widow_waist": 0.0,
             "widow_shoulder": 0.0,
             "widow_elbow": 0.0,
-            "forearm_roll": 0.0,
+            "widow_forearm_roll": 0.0,
             "widow_wrist_angle": 0.0,
             "widow_wrist_rotate": 0.0,
+            # 'widow_left_finger': 0,
+            # 'widow_right_finger': 0
+            
         }
 
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
-        stiffness = {
-            'hip': 50., 'thigh': 50., 'calf': 50.,  # 腿部
-            'widow': 5., 'forearm': 5. # 手臂
-        }  # Kp
-        damping = {
-            'hip': 1., 'thigh': 1., 'calf': 1.,     # 腿部
-            'widow': 0.5, 'forearm': 0.5 # 手臂
-        }  # Kd
+        stiffness = {'joint': 50, 'widow': 5}  # [N*m/rad] kp
+        damping = {'joint': 1, 'widow': 0.5}     # [N*m*s/rad] kd
         # action scale: target angle = actionScale * action + defaultAngle
-        action_scale = 0.5
+        action_scale = [0.4, 0.45, 0.45] * 2 + [0.4, 0.45, 0.45] * 2 + [2.1, 0.6, 0.6, 0, 0, 0]
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
         use_actuator_network = False
