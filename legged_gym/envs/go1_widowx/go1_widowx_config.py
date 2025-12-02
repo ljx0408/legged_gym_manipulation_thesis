@@ -32,7 +32,7 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class Go1WidowXRoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env ):
-        num_envs = 1
+        num_envs = 4096
         num_actions = 18     # 12腿 + 6臂
         num_observations = 72  # 明确告诉程序只要 72 维
 
@@ -73,6 +73,34 @@ class Go1WidowXRoughCfg( LeggedRobotCfg ):
             
         }
 
+# === 添加到 Go1WidowXRoughCfg 类中 ===
+    
+    class goal_ee:
+        # 目标生成的命令模式：'sphere' (球坐标) 或 'cart' (笛卡尔坐标)
+        command_mode = 'sphere' 
+        
+        # 目标保持时间：每隔多久换一个目标？(秒)
+        # 这里设置为 1 到 3 秒之间随机
+        traj_time = [1.0, 3.0] 
+        
+        class ranges:
+            # === 目标生成范围 (球坐标) ===
+            # l: 距离 (半径) [米]
+            # p: 俯仰角 (Pitch) [弧度]
+            # y: 偏航角 (Yaw) [弧度]
+            
+            # 初始/最终范围 (论文里有课程学习，我们先设一个固定的简单范围)
+            # 距离：0.3米 到 0.6米
+            final_pos_l = [0.3, 0.6] 
+            # 俯仰：上下各 30度左右 (-0.5 到 0.5)
+            final_pos_p = [-0.5, 0.5]
+            # 偏航：左右各 45度左右 (-0.8 到 0.8)
+            final_pos_y = [-0.8, 0.8]
+
+            # 目标姿态的扰动范围 (Roll, Pitch, Yaw)
+            # 暂时设为 0，让目标姿态保持水平，降低难度
+            final_delta_orn = [[0, 0], [0, 0], [0, 0]]
+            
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
         stiffness = {'joint': 50, 'widow': 5}  # [N*m/rad] kp
@@ -101,11 +129,46 @@ class Go1WidowXRoughCfg( LeggedRobotCfg ):
         base_height_target = 0.35
         max_contact_force = 500.
         only_positive_rewards = True
+        # 设为 0.25 意味着：如果你偏离了 0.25米，你的得分就只有 e^-1 = 0.36分了。
+        # 这个值越小，这就要求机器人抓得越准。
+        tracking_ee_sigma = 0.25
         class scales( LeggedRobotCfg.rewards.scales ):
-            pass
+            # === A. 核心生存奖励 (先站起来，别滚！) ===
+            termination = -200.0  # 摔倒（触发reset）的重罚！告诉它摔倒是最大的错误。
+            tracking_lin_vel = 1.0  # 听话走路（跟随速度指令）。这是行走的核心动力。
+            tracking_ang_vel = 0.5  # 听话转弯。
+            
+            # === B. 姿态惩罚 (解决打滚问题的关键) ===
+            # 惩罚身体沿 x/y 轴的倾斜角速度。让它保持背部水平，不要乱扭。
+            ang_vel_xy = -0.05    
+            # 惩罚垂直方向的速度。让它不要跳，也不要在这方向剧烈震荡。
+            lin_vel_z = -2.0      
+            
+            # === C. 机械臂奖励 (你的新功能) ===
+            # 权重 0.5 - 0.8 比较合适。
+            # 如果太高(>1.0)，它会为了伸手而牺牲站立平衡；如果太低(<0.1)，它懒得伸手。
+            tracking_ee_sphere = 0.5 
+            
+            # === D. 正则化/平滑项 (防止抽搐) ===
+            # 惩罚力矩：让它省点力气，不要电机过热。
+            torques = -0.00001    
+            # 惩罚动作幅度：防止它腿和手甩得太猛。
+            dof_acc = -2.5e-7
+            # 惩罚关节速度：让动作慢一点，稳一点。
+            dof_vel = -0.0
+            # 碰撞惩罚：如果小腿或大腿撞地，扣分。
+            collision = -1.0      
+            # 动作连贯性：惩罚动作变化太快（抖动）。
+            action_rate = -0.01   
+            
+            # === E. 那些暂时不用的 ===
+            # 如果你没写对应的函数，设为 0 或者注释掉
+            # feet_air_time = 1.0 (如果你想让它步态更好看，以后可以加)
 
 class Go1WidowXRoughCfgPPO( LeggedRobotCfgPPO ):
     class runner( LeggedRobotCfgPPO.runner ):
         run_name = ''
         experiment_name = 'go1_widowx'
         load_run = -1
+        
+        max_iterations = 10000 # 你现在的设置就挺好

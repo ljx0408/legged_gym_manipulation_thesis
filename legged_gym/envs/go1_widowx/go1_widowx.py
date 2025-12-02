@@ -13,6 +13,14 @@ from legged_gym.envs import LeggedRobot
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from .go1_widowx_config import Go1WidowXRoughCfg
 
+# === 在 go1_widowx.py 开头添加 ===
+
+def sphere2cart(sphere_coords):
+    l, p, y = sphere_coords[:, 0], sphere_coords[:, 1], sphere_coords[:, 2]
+    x = l * torch.cos(p) * torch.cos(y)
+    y = l * torch.cos(p) * torch.sin(y)
+    z = l * torch.sin(p)
+    return torch.stack([x, y, z], dim=-1)
 
 class Go1WidowX(LeggedRobot):
     cfg : Go1WidowXRoughCfg
@@ -23,7 +31,8 @@ class Go1WidowX(LeggedRobot):
     def reset_idx(self, env_ids):
         super().reset_idx(env_ids)
         # 如果后面加了末端目标(Goal EE)，会在这里添加重置目标的逻辑
-        # 暂时留空即可
+        # === 【新增】环境重置时，生成新目标 ===
+        self._resample_ee_goal(env_ids) # 重置时必须刷新目标
 
     def _init_buffers(self):
         """
@@ -31,7 +40,15 @@ class Go1WidowX(LeggedRobot):
         """
         # 1. 让父类先干脏活累活（初始化 dof_pos, dof_vel 等）
         super()._init_buffers()
+        # === 【新增】初始化刚体状态张量 (Rigid Body State) ===
+        # 这一步是为了获取机械臂末端（手）的绝对位置，父类默认没有做这一步
+        rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
         
+        # view(num_envs, num_bodies, 13)
+        # 13 包含: position(3) + orientation(4) + linear_vel(3) + angular_vel(3)
+        self.rigid_body_state = gymtorch.wrap_tensor(rigid_body_state).view(self.num_envs, -1, 13)
+
         # 2. 初始化 P (刚度) 和 D (阻尼) 的张量
         # device=self.device 确保这些张量在 GPU 上
         self.p_gains = torch.zeros(self.num_dofs, dtype=torch.float, device=self.device, requires_grad=False)
@@ -66,8 +83,73 @@ class Go1WidowX(LeggedRobot):
             device=self.device, 
             requires_grad=False,
             )
+        
+        self.action_scale = torch.tensor(
+            self.cfg.control.action_scale, 
+            device=self.device, 
+            dtype=torch.float
+        )
+
+# === 【新增】初始化目标相关的张量 ===
+        # 1. 读取范围配置
+        self.goal_ee_l_range = torch.tensor(self.cfg.goal_ee.ranges.final_pos_l, device=self.device)
+        self.goal_ee_p_range = torch.tensor(self.cfg.goal_ee.ranges.final_pos_p, device=self.device)
+        self.goal_ee_y_range = torch.tensor(self.cfg.goal_ee.ranges.final_pos_y, device=self.device)
+        self.goal_ee_traj_time = torch.tensor(self.cfg.goal_ee.traj_time, device=self.device)
+
+        # 2. 初始化存储张量
+        self.ee_goal_sphere = torch.zeros(self.num_envs, 3, device=self.device)
+        self.ee_goal_cart = torch.zeros(self.num_envs, 3, device=self.device)
+        self.goal_timer = torch.zeros(self.num_envs, device=self.device)
+        
+        # 3. 马上生成第一次目标，防止开局是0
+        self._resample_ee_goal(torch.arange(self.num_envs, device=self.device))
+
+        # === 【新增】找到机械臂末端(夹爪)的索引 ===
+        self.gripper_idx = self.gym.find_actor_rigid_body_handle(
+            self.envs[0], 
+            self.actor_handles[0], 
+            "wx250s/ee_gripper_link"
+        )
+
+    def _resample_ee_goal(self, env_ids):
+        if len(env_ids) == 0: return
+
+        # 1. 随机生成球坐标 [0,1] -> [min, max]
+        rng = torch.rand(len(env_ids), 3, device=self.device)
+        l = self.goal_ee_l_range[0] + rng[:, 0] * (self.goal_ee_l_range[1] - self.goal_ee_l_range[0])
+        p = self.goal_ee_p_range[0] + rng[:, 1] * (self.goal_ee_p_range[1] - self.goal_ee_p_range[0])
+        y = self.goal_ee_y_range[0] + rng[:, 2] * (self.goal_ee_y_range[1] - self.goal_ee_y_range[0])
+
+        self.ee_goal_sphere[env_ids, 0] = l
+        self.ee_goal_sphere[env_ids, 1] = p
+        self.ee_goal_sphere[env_ids, 2] = y
+
+        # 2. 转换为直角坐标 (给奖励函数和观测用)
+        # 注意：这里需要加上基座偏移（机械臂不是长在地面上的，是长在狗背上的）
+        # 简单起见，我们先假设目标是相对于【机械臂基座】的
+        self.ee_goal_cart[env_ids] = sphere2cart(self.ee_goal_sphere[env_ids])
+
+        # 3. 重置倒计时
+        time_s = self.goal_ee_traj_time[0] + torch.rand(len(env_ids), device=self.device) * (self.goal_ee_traj_time[1] - self.goal_ee_traj_time[0])
+        self.goal_timer[env_ids] = time_s / self.dt
 
     
+    def _post_physics_step_callback(self):
+
+        # 1. 刷新刚体状态 (告诉物理引擎：更新一下机械臂的位置数据！)
+        # 如果不加这行，self.rigid_body_state 里的数据永远是静止的
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        
+        super()._post_physics_step_callback()
+        
+        # 倒计时
+        self.goal_timer -= 1
+        # 谁的时间到了，就给谁换个新目标
+        reset_ids = (self.goal_timer <= 0).nonzero(as_tuple=False).flatten()
+        if len(reset_ids) > 0:
+            self._resample_ee_goal(reset_ids)
+       
     def compute_observations(self):
         """
         核心修改：构建符合论文要求的 72 维观测向量。
@@ -96,11 +178,15 @@ class Go1WidowX(LeggedRobot):
         # 告诉机器人往哪走
         obs_commands = self.commands[:, :3] * self.commands_scale
 
-        # 7. 末端目标 (Goal) - [维度: 6]
-        # 【重要】论文必须项。虽然现在还没写生成逻辑，先用0占位，保证网络结构正确。
+        # 7. 末端目标 (Goal)
+        # 使用我们实时更新的直角坐标目标
+        # 还需要加上目标姿态 (Config里设了final_delta_orn为0，所以这里也先用0占位或者简单处理)
         batch_size = self.num_envs
-        obs_ee_goal = torch.zeros(batch_size, 6, device=self.device) 
+        target_pos = self.ee_goal_cart # [Batch, 3]
+        target_orn = torch.zeros(batch_size, 3, device=self.device) # [Batch, 3] 暂时用0表示姿态目标
 
+        obs_ee_goal = torch.cat([target_pos, target_orn], dim=-1) # [Batch, 6]
+        
         # 8. 足底接触力 - [维度: 4]
         # 论文提及的 contact indicators，帮助感知是否踩实
         obs_foot_contacts = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 0.1).float()
@@ -121,13 +207,41 @@ class Go1WidowX(LeggedRobot):
         self.privileged_obs_buf = self.obs_buf
         
         return self.obs_buf
+# === 【新增】机械臂追踪奖励函数 ===
+    def _reward_tracking_ee_sphere(self):
+        # 1. 获取手的位置 (世界坐标)
+        ee_pos = self.rigid_body_state[:, self.gripper_idx, :3]
+
+        # 2. 获取目标位置 (相对坐标)
+        target_pos_rel = self.ee_goal_cart
+        
+        # 3. 把目标转成世界坐标
+        # 目标世界坐标 = 机器人基座位置 + 旋转后的相对目标
+        # 注意：这里我们做一个简化，假设机器人身体是平的，直接加基座位置
+        # (更严谨的做法是用四元数旋转 target_pos_rel，但先跑通再说)
+        base_pos = self.root_states[:, :3]
+        # 加上基座高度偏移 (机械臂是装在狗背上的，不是脚底)
+        # 假设机械臂安装高度是 0.35m (init_state.pos) + 0.05m (安装座)
+        # 简单起见，我们直接用 base_pos + target_pos_rel 试试
+        # 更好的做法是在 compute_observations 里就把相对坐标喂给网络，奖励函数也算相对距离
+        
+        # --- 推荐方案：计算相对距离 ---
+        # 把 ee_pos (世界) 减去 base_pos (世界) = ee_pos_rel (相对)
+        ee_pos_rel = ee_pos - self.root_states[:, :3]
+        
+        # 然后算 ee_pos_rel 和 target_pos_rel 的距离
+        distance = torch.norm(target_pos_rel - ee_pos_rel, dim=-1)
+
+        reward = torch.exp(-distance / self.cfg.rewards.tracking_ee_sigma)
+        return reward
+       
     def _compute_torques(self, actions):
         """
         【核心修改】计算电机力矩
         使用我们在 _init_buffers 里解析好的 p_gains 和 d_gains
         """
         # 1. 动作缩放：神经网络输出通常在 [-1, 1]，需要缩放到实际弧度（比如 * 0.5）
-        actions_scaled = actions * self.cfg.control.action_scale
+        actions_scaled = actions * self.action_scale
         
         # 2. 获取控制模式（通常是 'P'）
         control_type = self.cfg.control.control_type
